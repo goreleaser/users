@@ -7,11 +7,10 @@ import (
 	"sort"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	"github.com/apex/log"
 	"github.com/apex/log/handlers/cli"
 	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
 )
 
 type Repo struct {
