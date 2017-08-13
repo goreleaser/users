@@ -31,7 +31,7 @@ func main() {
 	var client = github.NewClient(oauth2.NewClient(ctx, ts))
 	var repos []Repo
 
-	for _, file := range []string{"goreleaser.yml", ".goreleaser.yml"} {
+	for _, file := range []string{"goreleaser.yml", "goreleaser.yaml"} {
 		log.Infof("looking for repos with a %s file...", file)
 		var opts = &github.SearchOptions{
 			ListOptions: github.ListOptions{
@@ -40,7 +40,11 @@ func main() {
 			},
 		}
 		for {
-			result, resp, err := client.Search.Code(ctx, fmt.Sprintf("filename:%s", file), opts)
+			result, resp, err := client.Search.Code(
+				ctx,
+				fmt.Sprintf("filename:%s language:yaml", file),
+				opts,
+			)
 			if _, ok := err.(*github.RateLimitError); ok {
 				log.Warn("hit rate limit")
 				time.Sleep(10 * time.Second)
@@ -51,14 +55,15 @@ func main() {
 			}
 			log.Infof("found %d results", len(result.CodeResults))
 			for _, result := range result.CodeResults {
-				if !exists(result.Repository.GetFullName(), repos) {
-					repo, err := newRepo(ctx, client, result)
-					if err != nil {
-						log.WithField("repo", result.Repository.GetFullName()).
-							WithError(err).Error("failed to get repo details")
-					}
-					repos = append(repos, repo)
+				if exists(result.Repository.GetFullName(), repos) {
+					continue
 				}
+				repo, err := newRepo(ctx, client, result)
+				if err != nil {
+					log.WithField("repo", result.Repository.GetFullName()).
+						WithError(err).Error("failed to get repo details")
+				}
+				repos = append(repos, repo)
 			}
 			if resp.NextPage == 0 {
 				break
@@ -69,8 +74,12 @@ func main() {
 	sort.Slice(repos, func(i, j int) bool {
 		return repos[i].Stars > repos[j].Stars
 	})
+	log.Info("")
+	log.Info("")
+	log.Infof("\033[1mTHERE ARE %d REPOSITORIES USING GORELEASER:\033[0m", len(repos))
+	log.Info("")
 	for _, repo := range repos {
-		log.Infof("%s has %d stars", repo.Name, repo.Stars)
+		log.Infof("%s with %d stars", repo.Name, repo.Stars)
 	}
 }
 
