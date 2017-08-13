@@ -5,16 +5,22 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"time"
 
 	"golang.org/x/oauth2"
 
 	"github.com/apex/log"
+	"github.com/apex/log/handlers/cli"
 	"github.com/google/go-github/github"
 )
 
 type Repo struct {
 	Name  string
 	Stars int
+}
+
+func init() {
+	log.SetHandler(cli.New(os.Stdout))
 }
 
 func main() {
@@ -27,32 +33,33 @@ func main() {
 	var repos []Repo
 
 	for _, file := range []string{"goreleaser.yml", ".goreleaser.yml"} {
+		log.Infof("looking for repos with a %s file...", file)
 		var opts = &github.SearchOptions{
 			ListOptions: github.ListOptions{
-				Page: 1,
+				Page:    1,
+				PerPage: 100,
 			},
 		}
 		for {
 			result, resp, err := client.Search.Code(ctx, fmt.Sprintf("filename:%s", file), opts)
+			if _, ok := err.(*github.RateLimitError); ok {
+				log.Warn("hit rate limit")
+				time.Sleep(10 * time.Second)
+				continue
+			}
 			if err != nil {
 				log.WithError(err).Fatal("failed to gather results")
 			}
+			log.Infof("found %d results", len(result.CodeResults))
 			for _, result := range result.CodeResults {
-				repo, _, err := client.Repositories.Get(
-					ctx,
-					result.Repository.Owner.GetLogin(),
-					result.Repository.GetName(),
-				)
-				if err != nil {
-					log.WithError(err).Error("failed to get repo data")
+				if !exists(result.Repository.GetFullName(), repos) {
+					repo, err := newRepo(ctx, client, result)
+					if err != nil {
+						log.WithField("repo", result.Repository.GetFullName()).
+							WithError(err).Error("failed to get repo details")
+					}
+					repos = append(repos, repo)
 				}
-				repos = append(
-					repos,
-					Repo{
-						Name:  result.Repository.GetFullName(),
-						Stars: repo.GetStargazersCount(),
-					},
-				)
 			}
 			if resp.NextPage == 0 {
 				break
@@ -63,24 +70,34 @@ func main() {
 	sort.Slice(repos, func(i, j int) bool {
 		return repos[i].Stars > repos[j].Stars
 	})
-	repos = removeDupes(repos)
 	for _, repo := range repos {
 		log.Infof("%s has %d stars", repo.Name, repo.Stars)
 	}
 }
 
-func removeDupes(repos []Repo) (result []Repo) {
-	for _, r := range repos {
-		if !exists(r, result) {
-			result = append(result, r)
-		}
+func newRepo(ctx context.Context, client *github.Client, result github.CodeResult) (Repo, error) {
+	repo, _, err := client.Repositories.Get(
+		ctx,
+		result.Repository.Owner.GetLogin(),
+		result.Repository.GetName(),
+	)
+	if _, ok := err.(*github.RateLimitError); ok {
+		log.Warn("hit rate limit")
+		time.Sleep(10 * time.Second)
+		return newRepo(ctx, client, result)
 	}
-	return
+	if err != nil {
+		return Repo{}, err
+	}
+	return Repo{
+		Name:  repo.GetFullName(),
+		Stars: repo.GetStargazersCount(),
+	}, nil
 }
 
-func exists(r Repo, rs []Repo) bool {
-	for _, rr := range rs {
-		if rr.Name == r.Name {
+func exists(name string, rs []Repo) bool {
+	for _, r := range rs {
+		if r.Name == name {
 			return true
 		}
 	}
