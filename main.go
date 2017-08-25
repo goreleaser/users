@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/apex/log"
@@ -16,6 +17,7 @@ import (
 type Repo struct {
 	Name  string
 	Stars int
+	Date  time.Time
 }
 
 func init() {
@@ -63,6 +65,9 @@ func main() {
 					log.WithField("repo", result.Repository.GetFullName()).
 						WithError(err).Error("failed to get repo details")
 				}
+				if repo.Name == "" {
+					continue
+				}
 				repos = append(repos, repo)
 			}
 			if resp.NextPage == 0 {
@@ -79,7 +84,7 @@ func main() {
 	log.Infof("\033[1mTHERE ARE %d REPOSITORIES USING GORELEASER:\033[0m", len(repos))
 	log.Info("")
 	for _, repo := range repos {
-		log.Infof("%s with %d stars", repo.Name, repo.Stars)
+		log.Infof("%s with %d stars (using since %v)", repo.Name, repo.Stars, repo.Date)
 	}
 }
 
@@ -97,9 +102,45 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 	if err != nil {
 		return Repo{}, err
 	}
+	if strings.HasPrefix(result.GetPath(), "/") {
+		return Repo{}, nil
+	}
+	commits, _, err := client.Repositories.ListCommits(
+		ctx,
+		repo.Owner.GetLogin(),
+		repo.GetName(),
+		&github.CommitsListOptions{
+			Path: result.GetPath(),
+		},
+	)
+	if _, ok := err.(*github.RateLimitError); ok {
+		log.Warn("hit rate limit")
+		time.Sleep(10 * time.Second)
+		return newRepo(ctx, client, result)
+	}
+	if err != nil || len(commits) == 0 {
+		return Repo{}, err
+	}
+	commit := commits[len(commits)-1]
+	c, _, err := client.Git.GetCommit(
+		ctx,
+		repo.Owner.GetLogin(),
+		repo.GetName(),
+		commit.GetSHA(),
+	)
+	if _, ok := err.(*github.RateLimitError); ok {
+		log.Warn("hit rate limit")
+		time.Sleep(10 * time.Second)
+		return newRepo(ctx, client, result)
+	}
+	if err != nil {
+		return Repo{}, err
+	}
+
 	return Repo{
 		Name:  repo.GetFullName(),
 		Stars: repo.GetStargazersCount(),
+		Date:  c.Committer.GetDate(),
 	}, nil
 }
 
