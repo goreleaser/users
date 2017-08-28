@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/apex/log"
 	"github.com/apex/log/handlers/cli"
 	"github.com/google/go-github/github"
+	chart "github.com/wcharczuk/go-chart"
 	"golang.org/x/oauth2"
 )
 
@@ -86,6 +89,11 @@ func main() {
 	for _, repo := range repos {
 		log.Infof("%s with %d stars (using since %v)", repo.Name, repo.Stars, repo.Date)
 	}
+	graph, err := graphRepos(repos)
+	if err != nil {
+		log.WithError(err).Fatal("failed to graph repos")
+	}
+	log.Infof("\ngraph saved at %s", graph)
 }
 
 func newRepo(ctx context.Context, client *github.Client, result github.CodeResult) (Repo, error) {
@@ -151,4 +159,37 @@ func exists(name string, rs []Repo) bool {
 		}
 	}
 	return false
+}
+
+func graphRepos(repos []Repo) (string, error) {
+	var filename = fmt.Sprintf("chart_%v.svg", time.Now().Format(time.RFC822))
+	var series = chart.TimeSeries{Style: chart.StyleShow()}
+	sort.Slice(repos, func(i, j int) bool {
+		return repos[i].Date.Before(repos[j].Date)
+	})
+	for i, repo := range repos {
+		series.XValues = append(series.XValues, repo.Date)
+		series.YValues = append(series.YValues, float64(i))
+	}
+	var graph = chart.Chart{
+		XAxis: chart.XAxis{
+			Name:      "Time",
+			NameStyle: chart.StyleShow(),
+			Style:     chart.StyleShow(),
+		},
+		YAxis: chart.YAxis{
+			Name:      "Using",
+			NameStyle: chart.StyleShow(),
+			Style:     chart.StyleShow(),
+		},
+		Series: []chart.Series{series},
+	}
+	var buffer = bytes.NewBuffer([]byte{})
+	if err := graph.Render(chart.SVG, buffer); err != nil {
+		return "", err
+	}
+	if err := ioutil.WriteFile(filename, buffer.Bytes(), 0644); err != nil {
+		return "", err
+	}
+	return filename, nil
 }
