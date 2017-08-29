@@ -93,7 +93,12 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repos")
 	}
-	log.Infof("\ngraph saved at %s", graph)
+	log.Infof("\nrepositories graph saved at %s", graph)
+	graph, err = graphRepoStars(repos)
+	if err != nil {
+		log.WithError(err).Fatal("failed to graph repo stars")
+	}
+	log.Infof("\nrepositories stars graph saved at %s", graph)
 }
 
 func newRepo(ctx context.Context, client *github.Client, result github.CodeResult) (Repo, error) {
@@ -161,8 +166,32 @@ func exists(name string, rs []Repo) bool {
 	return false
 }
 
+func graphRepoStars(repos []Repo) (string, error) {
+	var filename = "stars.svg"
+	var graph = chart.BarChart{
+		XAxis: chart.StyleShow(),
+		YAxis: chart.YAxis{
+			Style: chart.StyleShow(),
+		},
+	}
+	for _, repo := range repos {
+		graph.Bars = append(graph.Bars, chart.Value{
+			Value: float64(repo.Stars),
+			Label: repo.Name,
+		})
+	}
+	var buffer = bytes.NewBuffer([]byte{})
+	if err := graph.Render(chart.SVG, buffer); err != nil {
+		return "", err
+	}
+	if err := ioutil.WriteFile(filename, buffer.Bytes(), 0644); err != nil {
+		return "", err
+	}
+	return filename, nil
+}
+
 func graphRepos(repos []Repo) (string, error) {
-	var filename = fmt.Sprintf("chart_%v.svg", time.Now().Format(time.RFC822))
+	var filename = "repos.svg"
 	var series = chart.TimeSeries{Style: chart.StyleShow()}
 	sort.Slice(repos, func(i, j int) bool {
 		return repos[i].Date.Before(repos[j].Date)
@@ -178,7 +207,7 @@ func graphRepos(repos []Repo) (string, error) {
 			Style:     chart.StyleShow(),
 		},
 		YAxis: chart.YAxis{
-			Name:      "Using",
+			Name:      "Repositories",
 			NameStyle: chart.StyleShow(),
 			Style:     chart.StyleShow(),
 		},
