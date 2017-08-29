@@ -9,5 +9,5 @@ i'm glad, thanks all!
 
 ----
 
-![](/stars.svg)
-![](/repos.svg)
+![](https://raw.githubusercontent.com/caarlos0/goreleaser-users/master/stars.svg)
+![](https://raw.githubusercontent.com/caarlos0/goreleaser-users/master/repos.svg)
