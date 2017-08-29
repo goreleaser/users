@@ -93,12 +93,13 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repos")
 	}
-	log.Infof("\nrepositories graph saved at %s", graph)
+	fmt.Println()
+	log.Infof("repositories graph saved at %s", graph)
 	graph, err = graphRepoStars(repos)
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repo stars")
 	}
-	log.Infof("\nrepositories stars graph saved at %s", graph)
+	log.Infof("repositories stars graph saved at %s", graph)
 }
 
 func newRepo(ctx context.Context, client *github.Client, result github.CodeResult) (Repo, error) {
@@ -167,21 +168,29 @@ func exists(name string, rs []Repo) bool {
 }
 
 func graphRepoStars(repos []Repo) (string, error) {
-	var filename = "stars.svg"
+	var filename = "stars.png"
 	var graph = chart.BarChart{
+		Title: "Top 10 repositories using GoReleaser by number of stargazers",
 		XAxis: chart.StyleShow(),
 		YAxis: chart.YAxis{
-			Style: chart.StyleShow(),
+			Style:     chart.StyleShow(),
+			NameStyle: chart.StyleShow(),
 		},
 	}
-	for _, repo := range repos {
+	sort.Slice(repos, func(i, j int) bool {
+		return repos[i].Stars > repos[j].Stars
+	})
+	for i, repo := range repos {
+		if i > 10 {
+			break
+		}
 		graph.Bars = append(graph.Bars, chart.Value{
 			Value: float64(repo.Stars),
 			Label: repo.Name,
 		})
 	}
 	var buffer = bytes.NewBuffer([]byte{})
-	if err := graph.Render(chart.SVG, buffer); err != nil {
+	if err := graph.Render(chart.PNG, buffer); err != nil {
 		return "", err
 	}
 	if err := ioutil.WriteFile(filename, buffer.Bytes(), 0644); err != nil {
@@ -191,7 +200,7 @@ func graphRepoStars(repos []Repo) (string, error) {
 }
 
 func graphRepos(repos []Repo) (string, error) {
-	var filename = "repos.svg"
+	var filename = "repos.png"
 	var series = chart.TimeSeries{Style: chart.StyleShow()}
 	sort.Slice(repos, func(i, j int) bool {
 		return repos[i].Date.Before(repos[j].Date)
@@ -201,6 +210,7 @@ func graphRepos(repos []Repo) (string, error) {
 		series.YValues = append(series.YValues, float64(i))
 	}
 	var graph = chart.Chart{
+		Title: "Number of repositories using GoReleaser over time",
 		XAxis: chart.XAxis{
 			Name:      "Time",
 			NameStyle: chart.StyleShow(),
@@ -214,7 +224,7 @@ func graphRepos(repos []Repo) (string, error) {
 		Series: []chart.Series{series},
 	}
 	var buffer = bytes.NewBuffer([]byte{})
-	if err := graph.Render(chart.SVG, buffer); err != nil {
+	if err := graph.Render(chart.PNG, buffer); err != nil {
 		return "", err
 	}
 	if err := ioutil.WriteFile(filename, buffer.Bytes(), 0644); err != nil {
