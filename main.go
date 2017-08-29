@@ -89,17 +89,19 @@ func main() {
 	for _, repo := range repos {
 		log.Infof("%s with %d stars (using since %v)", repo.Name, repo.Stars, repo.Date)
 	}
+	log.Info("")
+	log.Info("")
+	log.Infof("\033[1mGRAPHS GENERATED:\033[0m")
 	graph, err := graphRepos(repos)
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repos")
 	}
-	fmt.Println()
-	log.Infof("repositories graph saved at %s", graph)
+	log.Info(graph)
 	graph, err = graphRepoStars(repos)
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repo stars")
 	}
-	log.Infof("repositories stars graph saved at %s", graph)
+	log.Info(graph)
 }
 
 func newRepo(ctx context.Context, client *github.Client, result github.CodeResult) (Repo, error) {
@@ -170,8 +172,9 @@ func exists(name string, rs []Repo) bool {
 func graphRepoStars(repos []Repo) (string, error) {
 	var filename = "stars.png"
 	var graph = chart.BarChart{
-		Title: "Top 10 repositories using GoReleaser by number of stargazers",
-		XAxis: chart.StyleShow(),
+		Title:      "Top 5 repositories using GoReleaser by number of stargazers",
+		TitleStyle: chart.StyleShow(),
+		XAxis:      chart.StyleShow(),
 		YAxis: chart.YAxis{
 			Style:     chart.StyleShow(),
 			NameStyle: chart.StyleShow(),
@@ -181,7 +184,7 @@ func graphRepoStars(repos []Repo) (string, error) {
 		return repos[i].Stars > repos[j].Stars
 	})
 	for i, repo := range repos {
-		if i > 10 {
+		if i > 5 {
 			break
 		}
 		graph.Bars = append(graph.Bars, chart.Value{
@@ -210,7 +213,8 @@ func graphRepos(repos []Repo) (string, error) {
 		series.YValues = append(series.YValues, float64(i))
 	}
 	var graph = chart.Chart{
-		Title: "Number of repositories using GoReleaser over time",
+		Title:      "Number of repositories using GoReleaser over time",
+		TitleStyle: chart.StyleShow(),
 		XAxis: chart.XAxis{
 			Name:      "Time",
 			NameStyle: chart.StyleShow(),
