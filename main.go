@@ -17,6 +17,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// Repo is not actually a repo anymore, FIXME
 type Repo struct {
 	Name  string
 	Stars int
