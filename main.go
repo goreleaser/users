@@ -100,6 +100,11 @@ func main() {
 		log.WithField("file", csv).WithError(err).Fatal("failed create data file")
 	}
 	w := bufio.NewWriter(f)
+	defer func() {
+		if err := w.Flush(); err != nil {
+			log.WithField("file", csv).WithError(err).Error("failed to write to file")
+		}
+	}()
 	write := func(s string) {
 		if err != nil {
 			return
