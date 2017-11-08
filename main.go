@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -87,8 +88,31 @@ func main() {
 	log.Info("")
 	log.Infof("\033[1mTHERE ARE %d REPOSITORIES USING GORELEASER:\033[0m", len(repos))
 	log.Info("")
+	var csv = fmt.Sprintf("data/%s.csv", time.Now().Format("20060102"))
+	f, err := os.OpenFile(csv, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+	if err == nil {
+		defer func() {
+			if err := f.Close(); err != nil {
+				log.WithField("file", csv).WithError(err).Error("failed to close file")
+			}
+		}()
+	} else {
+		log.WithField("file", csv).WithError(err).Fatal("failed create data file")
+	}
+	w := bufio.NewWriter(f)
+	write := func(s string) {
+		if err != nil {
+			return
+		}
+		_, err = w.WriteString(s + "\n")
+	}
+	write("repo;stars")
 	for _, repo := range repos {
+		write(fmt.Sprintf("%s;%d", repo.Name, repo.Stars))
 		log.Infof("%s with %d stars (using since %v)", repo.Name, repo.Stars, repo.Date)
+	}
+	if err != nil {
+		log.WithField("file", csv).WithError(err).Fatal("failed write to data file")
 	}
 	log.Info("")
 	log.Info("")
