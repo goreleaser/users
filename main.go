@@ -111,9 +111,9 @@ func main() {
 		}
 		_, err = w.WriteString(s + "\n")
 	}
-	write("repo;stars")
+	write("repo,stars")
 	for _, repo := range repos {
-		write(fmt.Sprintf("%s;%d", repo.Name, repo.Stars))
+		write(fmt.Sprintf("%s,%d", repo.Name, repo.Stars))
 		log.Infof("%s with %d stars (using since %v)", repo.Name, repo.Stars, repo.Date)
 	}
 	if err != nil {
