@@ -202,7 +202,7 @@ func exists(name string, rs []Repo) bool {
 func graphRepoStars(repos []Repo) (string, error) {
 	var filename = "stars.png"
 	var graph = chart.BarChart{
-		Title:      "Top 10 repositories using GoReleaser by number of stargazers",
+		Title:      "Top 5 repositories using GoReleaser by number of stargazers",
 		TitleStyle: chart.StyleShow(),
 		XAxis:      chart.StyleShow(),
 		YAxis: chart.YAxis{
@@ -214,7 +214,7 @@ func graphRepoStars(repos []Repo) (string, error) {
 		return repos[i].Stars > repos[j].Stars
 	})
 	for i, repo := range repos {
-		if i > 10 {
+		if i > 5 {
 			break
 		}
 		graph.Bars = append(graph.Bars, chart.Value{
