@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apex/log"
@@ -36,7 +37,9 @@ func main() {
 		&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
 	)
 	var client = github.NewClient(oauth2.NewClient(ctx, ts))
+
 	var repos []Repo
+	var lock sync.Mutex
 
 	for _, file := range []string{"goreleaser.yml", "goreleaser.yaml"} {
 		log.Infof("looking for repos with a %s file...", file)
@@ -61,20 +64,33 @@ func main() {
 				log.WithError(err).Fatal("failed to gather results")
 			}
 			log.Infof("found %d results", len(result.CodeResults))
+			var wg sync.WaitGroup
+			wg.Add(len(result.CodeResults))
 			for _, result := range result.CodeResults {
-				if exists(result.Repository.GetFullName(), repos) {
-					continue
-				}
-				repo, err := newRepo(ctx, client, result)
-				if err != nil {
-					log.WithField("repo", result.Repository.GetFullName()).
-						WithError(err).Error("failed to get repo details")
-				}
-				if repo.Name == "" {
-					continue
-				}
-				repos = append(repos, repo)
+				result := result
+				go func() {
+					defer wg.Done()
+					var log = log.WithField("repo", result.Repository.GetFullName())
+					lock.Lock()
+					if exists(result.Repository.GetFullName(), repos) {
+						lock.Unlock()
+						log.Warn("already exist")
+						return
+					}
+					lock.Unlock()
+					repo, err := newRepo(ctx, client, result)
+					if err != nil {
+						log.
+							WithError(err).
+							Warn("failed to get repo details, discard")
+						return
+					}
+					lock.Lock()
+					repos = append(repos, repo)
+					lock.Unlock()
+				}()
 			}
+			wg.Wait()
 			if resp.NextPage == 0 {
 				break
 			}
@@ -114,7 +130,6 @@ func main() {
 	write("repo,stars")
 	for _, repo := range repos {
 		write(fmt.Sprintf("%s,%d", repo.Name, repo.Stars))
-		log.Infof("%s with %d stars (using since %v)", repo.Name, repo.Stars, repo.Date)
 	}
 	if err != nil {
 		log.WithField("file", csv).WithError(err).Fatal("failed write to data file")
@@ -149,7 +164,7 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 		return Repo{}, err
 	}
 	if strings.HasPrefix(result.GetPath(), "/") {
-		return Repo{}, nil
+		return Repo{}, fmt.Errorf("invalid file location: %s", result.GetPath())
 	}
 	commits, _, err := client.Repositories.ListCommits(
 		ctx,
