@@ -55,9 +55,7 @@ func main() {
 				fmt.Sprintf("filename:%s language:yaml", file),
 				opts,
 			)
-			if _, ok := err.(*github.RateLimitError); ok {
-				log.Warn("hit rate limit")
-				time.Sleep(10 * time.Second)
+			if rateLimited(err) {
 				continue
 			}
 			if err != nil {
@@ -155,15 +153,13 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 		result.Repository.Owner.GetLogin(),
 		result.Repository.GetName(),
 	)
-	if _, ok := err.(*github.RateLimitError); ok {
-		log.Warn("hit rate limit")
-		time.Sleep(10 * time.Second)
+	if rateLimited(err) {
 		return newRepo(ctx, client, result)
 	}
 	if err != nil {
 		return Repo{}, err
 	}
-	if strings.HasPrefix(result.GetPath(), "/") {
+	if strings.Contains(result.GetPath(), "vendor") {
 		return Repo{}, fmt.Errorf("invalid file location: %s", result.GetPath())
 	}
 	commits, _, err := client.Repositories.ListCommits(
@@ -174,9 +170,7 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 			Path: result.GetPath(),
 		},
 	)
-	if _, ok := err.(*github.RateLimitError); ok {
-		log.Warn("hit rate limit")
-		time.Sleep(10 * time.Second)
+	if rateLimited(err) {
 		return newRepo(ctx, client, result)
 	}
 	if err != nil || len(commits) == 0 {
@@ -189,9 +183,7 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 		repo.GetName(),
 		commit.GetSHA(),
 	)
-	if _, ok := err.(*github.RateLimitError); ok {
-		log.Warn("hit rate limit")
-		time.Sleep(10 * time.Second)
+	if rateLimited(err) {
 		return newRepo(ctx, client, result)
 	}
 	if err != nil {
@@ -280,4 +272,13 @@ func graphRepos(repos []Repo) (string, error) {
 		return "", err
 	}
 	return filename, nil
+}
+
+func rateLimited(err error) bool {
+	rerr, ok := err.(*github.RateLimitError)
+	if ok {
+		log.Warnf("hit rate limit, sleeping until %s", rerr.Rate.Reset.String())
+		time.Sleep(rerr.Rate.Reset.Time.Sub(time.Now()))
+	}
+	return ok
 }
