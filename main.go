@@ -46,7 +46,7 @@ func main() {
 		var opts = &github.SearchOptions{
 			ListOptions: github.ListOptions{
 				Page:    1,
-				PerPage: 100,
+				PerPage: 20,
 			},
 		}
 		for {
@@ -277,8 +277,17 @@ func graphRepos(repos []Repo) (string, error) {
 func rateLimited(err error) bool {
 	rerr, ok := err.(*github.RateLimitError)
 	if ok {
-		log.Warnf("hit rate limit, sleeping until %s", rerr.Rate.Reset.String())
-		time.Sleep(rerr.Rate.Reset.Time.Sub(time.Now()))
+		var d = rerr.Rate.Reset.Time.Sub(time.Now())
+		log.Warnf("hit rate limit, sleeping for %d min", d.Minutes())
+		time.Sleep(d)
+		return true
 	}
-	return ok
+	aerr, ok := err.(*github.AbuseRateLimitError)
+	if ok {
+		var d = aerr.GetRetryAfter()
+		log.Warnf("hit abuse mechanism, sleeping for %d min", d.Minutes())
+		time.Sleep(d)
+		return true
+	}
+	return false
 }
