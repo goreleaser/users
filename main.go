@@ -46,7 +46,7 @@ func main() {
 		var opts = &github.SearchOptions{
 			ListOptions: github.ListOptions{
 				Page:    1,
-				PerPage: 20,
+				PerPage: 10,
 			},
 		}
 		for {
