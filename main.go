@@ -26,7 +26,7 @@ type Repo struct {
 }
 
 func init() {
-	log.SetHandler(cli.New(os.Stdout))
+	log.SetHandler(cli.Default)
 }
 
 func main() {
