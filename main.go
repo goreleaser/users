@@ -180,23 +180,10 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 		return Repo{}, err
 	}
 	commit := commits[len(commits)-1]
-	c, _, err := client.Git.GetCommit(
-		ctx,
-		repo.Owner.GetLogin(),
-		repo.GetName(),
-		commit.GetSHA(),
-	)
-	if rateLimited(err) {
-		return newRepo(ctx, client, result)
-	}
-	if err != nil {
-		return Repo{}, err
-	}
-
 	return Repo{
 		Name:  repo.GetFullName(),
 		Stars: repo.GetStargazersCount(),
-		Date:  c.Committer.GetDate(),
+		Date:  commit.GetCommit().GetCommitter().GetDate(),
 	}, nil
 }
 
@@ -284,14 +271,14 @@ func rateLimited(err error) bool {
 	rerr, ok := err.(*github.RateLimitError)
 	if ok {
 		var d = rerr.Rate.Reset.Time.Sub(time.Now())
-		log.Warnf("hit rate limit, sleeping for %d min", d.Minutes())
+		log.Warnf("hit rate limit, sleeping for %.0f min", d.Minutes())
 		time.Sleep(d)
 		return true
 	}
 	aerr, ok := err.(*github.AbuseRateLimitError)
 	if ok {
 		var d = aerr.GetRetryAfter()
-		log.Warnf("hit abuse mechanism, sleeping for %d min", d.Minutes())
+		log.Warnf("hit abuse mechanism, sleeping for %.f min", d.Minutes())
 		time.Sleep(d)
 		return true
 	}
