@@ -46,7 +46,7 @@ func main() {
 		var opts = &github.SearchOptions{
 			ListOptions: github.ListOptions{
 				Page:    1,
-				PerPage: 10,
+				PerPage: 100,
 			},
 		}
 		for {
@@ -64,9 +64,14 @@ func main() {
 			log.Infof("found %d results", len(result.CodeResults))
 			var wg sync.WaitGroup
 			wg.Add(len(result.CodeResults))
+			var pool = make(chan bool, 10)
 			for _, result := range result.CodeResults {
 				result := result
+				pool <- true
 				go func() {
+					defer func() {
+						<-pool
+					}()
 					defer wg.Done()
 					var log = log.WithField("repo", result.Repository.GetFullName())
 					lock.Lock()
@@ -78,9 +83,7 @@ func main() {
 					lock.Unlock()
 					repo, err := newRepo(ctx, client, result)
 					if err != nil {
-						log.
-							WithError(err).
-							Warn("failed to get repo details, discard")
+						log.WithError(err).Warn("ignoring")
 						return
 					}
 					lock.Lock()
@@ -275,6 +278,9 @@ func graphRepos(repos []Repo) (string, error) {
 }
 
 func rateLimited(err error) bool {
+	if err == nil {
+		return false
+	}
 	rerr, ok := err.(*github.RateLimitError)
 	if ok {
 		var d = rerr.Rate.Reset.Time.Sub(time.Now())
@@ -289,5 +295,6 @@ func rateLimited(err error) bool {
 		time.Sleep(d)
 		return true
 	}
+	log.WithError(err).Errorf("wtf")
 	return false
 }
