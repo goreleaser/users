@@ -103,7 +103,7 @@ func main() {
 	})
 	log.Info("")
 	log.Info("")
-	log.Infof("\033[1mTHERE ARE %d REPOSITORIES USING GORELEASER:\033[0m", len(repos))
+	log.Infof("\033[1mthere are %d repositories using goreleaser\033[0m", len(repos))
 	log.Info("")
 	var csv = fmt.Sprintf("data/%s.csv", time.Now().Format("20060102"))
 	f, err := os.OpenFile(csv, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
@@ -128,16 +128,16 @@ func main() {
 		}
 		_, err = w.WriteString(s + "\n")
 	}
-	write("repo,stars")
+	write("repo,stars,since")
 	for _, repo := range repos {
-		write(fmt.Sprintf("%s,%d", repo.Name, repo.Stars))
+		write(fmt.Sprintf("%s,%d,%s", repo.Name, repo.Stars, repo.Date))
 	}
 	if err != nil {
 		log.WithField("file", csv).WithError(err).Fatal("failed write to data file")
 	}
 	log.Info("")
 	log.Info("")
-	log.Infof("\033[1mGRAPHS GENERATED:\033[0m")
+	log.Infof("\033[1mgraphs generated:\033[0m")
 	graph, err := graphRepos(repos)
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repos")
@@ -210,10 +210,7 @@ func graphRepoStars(repos []Repo) (string, error) {
 	sort.Slice(repos, func(i, j int) bool {
 		return repos[i].Stars > repos[j].Stars
 	})
-	for i, repo := range repos {
-		if i > 5 {
-			break
-		}
+	for _, repo := range repos[:5] {
 		graph.Bars = append(graph.Bars, chart.Value{
 			Value: float64(repo.Stars),
 			Label: repo.Name,
