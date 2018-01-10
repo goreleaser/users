@@ -176,8 +176,11 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 	if rateLimited(err) {
 		return newRepo(ctx, client, result)
 	}
-	if err != nil || len(commits) == 0 {
+	if err != nil {
 		return Repo{}, err
+	}
+	if len(commits) == 0 {
+		return Repo{}, fmt.Errorf("no commits found for %s", result.GetRepository().GetFullName())
 	}
 	commit := commits[len(commits)-1]
 	return Repo{
