@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -41,8 +40,8 @@ func main() {
 	var repos []Repo
 	var lock sync.Mutex
 
-	for _, file := range []string{"goreleaser.yml", "goreleaser.yaml"} {
-		log.Infof("looking for repos with a %s file...", file)
+	for _, ext := range []string{"yml", "yaml"} {
+		log.Infof("looking for repos with a goreleaser %s file...", ext)
 		var opts = &github.SearchOptions{
 			ListOptions: github.ListOptions{
 				Page:    1,
@@ -52,7 +51,7 @@ func main() {
 		for {
 			result, resp, err := client.Search.Code(
 				ctx,
-				fmt.Sprintf("filename:%s language:yaml", file),
+				fmt.Sprintf("filename:goreleaser extension:%s path:/", ext),
 				opts,
 			)
 			if rateLimited(err) {
@@ -161,9 +160,6 @@ func newRepo(ctx context.Context, client *github.Client, result github.CodeResul
 	}
 	if err != nil {
 		return Repo{}, err
-	}
-	if strings.Contains(result.GetPath(), "vendor") {
-		return Repo{}, fmt.Errorf("invalid file location: %s", result.GetPath())
 	}
 	commits, _, err := client.Repositories.ListCommits(
 		ctx,
