@@ -37,15 +37,14 @@ func main() {
 	)
 	var client = github.NewClient(oauth2.NewClient(ctx, ts))
 
-	var repos []Repo
-	var lock sync.Mutex
+	var repos sync.Map
 
 	for _, ext := range []string{"yml", "yaml"} {
 		log.Infof("looking for repos with a goreleaser %s file...", ext)
 		var opts = &github.SearchOptions{
 			ListOptions: github.ListOptions{
 				Page:    1,
-				PerPage: 100,
+				PerPage: 30,
 			},
 		}
 		for {
@@ -63,31 +62,22 @@ func main() {
 			log.Infof("found %d results", len(result.CodeResults))
 			var wg sync.WaitGroup
 			wg.Add(len(result.CodeResults))
-			var pool = make(chan bool, 10)
 			for _, result := range result.CodeResults {
 				result := result
-				pool <- true
 				go func() {
-					defer func() {
-						<-pool
-					}()
 					defer wg.Done()
-					var log = log.WithField("repo", result.Repository.GetFullName())
-					lock.Lock()
-					if exists(result.Repository.GetFullName(), repos) {
-						lock.Unlock()
-						log.Warn("already exist")
+					key := result.Repository.GetFullName()
+					var log = log.WithField("repo", key)
+					if _, ok := repos.Load(key); ok {
+						log.Info("already in the list")
 						return
 					}
-					lock.Unlock()
 					repo, err := newRepo(ctx, client, result)
 					if err != nil {
 						log.WithError(err).Warn("ignoring")
 						return
 					}
-					lock.Lock()
-					repos = append(repos, repo)
-					lock.Unlock()
+					repos.Store(key, repo)
 				}()
 			}
 			wg.Wait()
@@ -97,12 +87,17 @@ func main() {
 			opts.Page = resp.NextPage
 		}
 	}
-	sort.Slice(repos, func(i, j int) bool {
-		return repos[i].Stars > repos[j].Stars
+	var repoSlice []Repo
+	repos.Range(func(key, value interface{}) bool {
+		repoSlice = append(repoSlice, value.(Repo))
+		return true
+	})
+	sort.Slice(repoSlice, func(i, j int) bool {
+		return repoSlice[i].Stars > repoSlice[j].Stars
 	})
 	log.Info("")
 	log.Info("")
-	log.Infof("\033[1mthere are %d repositories using goreleaser\033[0m", len(repos))
+	log.Infof("\033[1mthere are %d repositories using goreleaser\033[0m", len(repoSlice))
 	log.Info("")
 	var csv = fmt.Sprintf("data/%s.csv", time.Now().Format("20060102"))
 	f, err := os.OpenFile(csv, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
@@ -128,7 +123,7 @@ func main() {
 		_, err = w.WriteString(s + "\n")
 	}
 	write("repo,stars,since")
-	for _, repo := range repos {
+	for _, repo := range repoSlice {
 		write(fmt.Sprintf("%s,%d,%s", repo.Name, repo.Stars, repo.Date))
 	}
 	if err != nil {
@@ -137,12 +132,12 @@ func main() {
 	log.Info("")
 	log.Info("")
 	log.Infof("\033[1mgraphs generated:\033[0m")
-	graph, err := graphRepos(repos)
+	graph, err := graphRepos(repoSlice)
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repos")
 	}
 	log.Info(graph)
-	graph, err = graphRepoStars(repos)
+	graph, err = graphRepoStars(repoSlice)
 	if err != nil {
 		log.WithError(err).Fatal("failed to graph repo stars")
 	}
