@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,7 +51,7 @@ func main() {
 		for {
 			result, resp, err := client.Search.Code(
 				ctx,
-				fmt.Sprintf("filename:goreleaser extension:%s path:/", ext),
+				fmt.Sprintf("filename:goreleaser extension:%s", ext),
 				opts,
 			)
 			if rateLimited(err) {
@@ -66,15 +67,19 @@ func main() {
 				result := result
 				go func() {
 					defer wg.Done()
-					key := result.Repository.GetFullName()
-					var log = log.WithField("repo", key)
+					var key = result.Repository.GetFullName() + "/" + result.GetPath()
+					var log = log.WithField("key", key)
+					if strings.Contains(key, "/vendor/") {
+						log.Warn("ignoring vendor folder")
+						return
+					}
 					if _, ok := repos.Load(key); ok {
-						log.Info("already in the list")
+						log.Warn("already in the list")
 						return
 					}
 					repo, err := newRepo(ctx, client, result)
 					if err != nil {
-						log.WithError(err).Warn("ignoring")
+						log.WithError(err).Warn("failed to grap details, ignoring")
 						return
 					}
 					repos.Store(key, repo)
