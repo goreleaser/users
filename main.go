@@ -42,9 +42,7 @@ func main() {
 	var total int
 
 	log.Infof("looking for repos with a goreleaser config file...")
-	var opts = &github.SearchOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
-	}
+	var opts = &github.SearchOptions{ListOptions: github.ListOptions{}}
 	for {
 		result, resp, err := client.Search.Code(
 			ctx,
