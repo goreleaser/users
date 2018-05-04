@@ -39,58 +39,57 @@ func main() {
 	var client = github.NewClient(oauth2.NewClient(ctx, ts))
 
 	var repos sync.Map
+	var total int
 
-	for _, ext := range []string{"yml", "yaml"} {
-		log.Infof("looking for repos with a goreleaser %s file...", ext)
-		var opts = &github.SearchOptions{
-			ListOptions: github.ListOptions{
-				Page:    1,
-				PerPage: 30,
-			},
+	log.Infof("looking for repos with a goreleaser config file...")
+	var opts = &github.SearchOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+	for {
+		result, resp, err := client.Search.Code(
+			ctx,
+			"filename:goreleaser extension:yaml extension:yml",
+			opts,
+		)
+		if rateLimited(err) {
+			continue
 		}
-		for {
-			result, resp, err := client.Search.Code(
-				ctx,
-				fmt.Sprintf("filename:goreleaser extension:%s", ext),
-				opts,
-			)
-			if rateLimited(err) {
-				continue
-			}
-			if err != nil {
-				log.WithError(err).Fatal("failed to gather results")
-			}
-			log.Infof("found %d results", len(result.CodeResults))
-			var wg sync.WaitGroup
-			wg.Add(len(result.CodeResults))
-			for _, result := range result.CodeResults {
-				result := result
-				go func() {
-					defer wg.Done()
-					var key = result.Repository.GetFullName() + "/" + result.GetPath()
-					var log = log.WithField("key", key)
-					if strings.Contains(key, "/vendor/") {
-						log.Warn("ignoring vendor folder")
-						return
-					}
-					if _, ok := repos.Load(key); ok {
-						log.Warn("already in the list")
-						return
-					}
-					repo, err := newRepo(ctx, client, result)
-					if err != nil {
-						log.WithError(err).Warn("failed to grap details, ignoring")
-						return
-					}
-					repos.Store(key, repo)
+		if err != nil {
+			log.WithError(err).Fatal("failed to gather results")
+		}
+		total = total + len(result.CodeResults)
+		log.Infof("found %d results", len(result.CodeResults))
+
+		var wg sync.WaitGroup
+		sem := make(chan bool, 10)
+		wg.Add(len(result.CodeResults))
+		for _, result := range result.CodeResults {
+			result := result
+			sem <- true
+			go func() {
+				defer func() {
+					wg.Done()
+					<-sem
 				}()
-			}
-			wg.Wait()
-			if resp.NextPage == 0 {
-				break
-			}
-			opts.Page = resp.NextPage
+				var key = result.Repository.GetFullName() + "/" + result.GetPath()
+				var log = log.WithField("key", key)
+				if strings.Contains(key, "/vendor/") {
+					log.Warn("ignoring vendor folder")
+					return
+				}
+				repo, err := newRepo(ctx, client, result)
+				if err != nil {
+					log.WithError(err).Warn("failed to grab details, ignoring")
+					return
+				}
+				repos.Store(key, repo)
+			}()
 		}
+		wg.Wait()
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 	}
 	var repoSlice []Repo
 	repos.Range(func(key, value interface{}) bool {
@@ -102,7 +101,11 @@ func main() {
 	})
 	log.Info("")
 	log.Info("")
-	log.Infof("\033[1mthere are %d repositories using goreleaser\033[0m", len(repoSlice))
+	log.Info("")
+	log.Infof("\033[1ma total of %d search results were found\033[0m", total)
+	log.Infof("\033[1mfrom that total, %d search results seem like projects using goreleaser\033[0m", len(repoSlice))
+	log.Info("")
+	log.Info("")
 	log.Info("")
 	var csv = fmt.Sprintf("data/%s.csv", time.Now().Format("20060102"))
 	f, err := os.OpenFile(csv, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
@@ -134,8 +137,6 @@ func main() {
 	if err != nil {
 		log.WithField("file", csv).WithError(err).Fatal("failed write to data file")
 	}
-	log.Info("")
-	log.Info("")
 	log.Infof("\033[1mgraphs generated:\033[0m")
 	graph, err := graphRepos(repoSlice)
 	if err != nil {
