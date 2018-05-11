@@ -56,7 +56,7 @@ func main() {
 			log.WithError(err).Fatal("failed to gather results")
 		}
 		total = total + len(result.CodeResults)
-		log.Infof("found %d results", len(result.CodeResults))
+		log.Infof("found %d of a total %d results", len(result.CodeResults), result.GetTotal())
 
 		var wg sync.WaitGroup
 		sem := make(chan bool, 10)
