@@ -46,7 +46,7 @@ func main() {
 	for {
 		result, resp, err := client.Search.Code(
 			ctx,
-			"filename:goreleaser extension:yaml extension:yml",
+			"filename:goreleaser extension:yaml extension:yml path:/",
 			opts,
 		)
 		if rateLimited(err) {
